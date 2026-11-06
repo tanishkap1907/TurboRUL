@@ -37,9 +37,10 @@ def download_cmapss(data_dir: str = "data/raw") -> str:
     downloaded = False
 
     if not os.path.exists(zip_path):
-        # try multiple URLs — NASA has moved the file before
+        # try multiple mirrors — NASA has moved the file before
         urls = [
             "https://data.nasa.gov/docs/legacy/CMAPSSData.zip",
+            "https://phm-datasets.s3.amazonaws.com/NASA/17.+Turbofan+Engine+Degradation+Simulation+Data+Set+2.zip",
             "https://data.nasa.gov/download/nk8v-ckry/application%2Fx-zip-compressed",
         ]
         ctx = ssl.create_default_context()
@@ -65,10 +66,24 @@ def download_cmapss(data_dir: str = "data/raw") -> str:
             _generate_synthetic_fd001(data_dir)
             return data_dir
 
-    # Extract zip
+    # Extract zip — handle different directory structures inside
     if downloaded or os.path.exists(zip_path):
         with zipfile.ZipFile(zip_path, "r") as zf:
+            # extract everything first
             zf.extractall(data_dir)
+
+            # if FD001 files ended up in a subfolder, move them up
+            for needed in ["train_FD001.txt", "test_FD001.txt", "RUL_FD001.txt"]:
+                target = os.path.join(data_dir, needed)
+                if not os.path.exists(target):
+                    # search inside extracted contents
+                    for name in zf.namelist():
+                        if name.endswith(needed):
+                            extracted = os.path.join(data_dir, name)
+                            if os.path.exists(extracted):
+                                os.rename(extracted, target)
+                                break
+
         print(f"Extracted to {data_dir}/")
 
     return data_dir
