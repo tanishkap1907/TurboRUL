@@ -37,24 +37,31 @@ def download_cmapss(data_dir: str = "data/raw") -> str:
     downloaded = False
 
     if not os.path.exists(zip_path):
-        url = (
-            "https://data.nasa.gov/download/nk8v-ckry/application%2Fx-zip-compressed"
+        # try multiple URLs — NASA has moved the file before
+        urls = [
+            "https://data.nasa.gov/docs/legacy/CMAPSSData.zip",
+            "https://data.nasa.gov/download/nk8v-ckry/application%2Fx-zip-compressed",
+        ]
+        ctx = ssl.create_default_context()
+        ca_bundle = os.environ.get("REQUESTS_CA_BUNDLE", "/root/.ccr/ca-bundle.crt")
+        if os.path.exists(ca_bundle):
+            ctx.load_verify_locations(ca_bundle)
+        opener = urllib.request.build_opener(
+            urllib.request.HTTPSHandler(context=ctx)
         )
-        try:
-            print("Downloading C-MAPSS dataset from NASA...")
-            ctx = ssl.create_default_context()
-            ca_bundle = os.environ.get("REQUESTS_CA_BUNDLE", "/root/.ccr/ca-bundle.crt")
-            if os.path.exists(ca_bundle):
-                ctx.load_verify_locations(ca_bundle)
-            opener = urllib.request.build_opener(
-                urllib.request.HTTPSHandler(context=ctx)
-            )
-            urllib.request.install_opener(opener)
-            urllib.request.urlretrieve(url, zip_path)
-            print(f"Saved to {zip_path}")
-            downloaded = True
-        except Exception as e:
-            print(f"Download failed ({e}). Generating synthetic FD001 dataset...")
+        urllib.request.install_opener(opener)
+
+        for url in urls:
+            try:
+                print(f"Downloading C-MAPSS dataset from NASA...")
+                urllib.request.urlretrieve(url, zip_path)
+                print(f"Saved to {zip_path}")
+                downloaded = True
+                break
+            except Exception as e:
+                print(f"  URL failed ({e}), trying next...")
+        else:
+            print("All download URLs failed. Generating synthetic FD001 dataset...")
             _generate_synthetic_fd001(data_dir)
             return data_dir
 
