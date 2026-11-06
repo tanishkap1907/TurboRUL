@@ -1,22 +1,17 @@
 """
-feature_engineering.py — Transform raw sensor readings into ML-ready features.
+feature_engineering.py - Build features for RUL prediction.
 
-Strategy:
-  1. Drop constant/near-constant sensors (zero variance → no signal)
-  2. Normalize remaining sensors per engine using min-max scaling
-  3. Engineer rolling-window statistics (mean, std, slope) to capture
-     degradation trends over the last W cycles
-  4. Return a flat feature matrix suitable for tree-based models,
-     plus a sequence tensor for LSTM
+Drops constant sensors, normalizes, and adds rolling window
+statistics to capture degradation trends. Outputs flat features
+for tree models and sequences for LSTM.
 """
 
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
-# Sensors that carry meaningful degradation signal (identified via
-# variance analysis on FD001 — sensors 1, 5, 6, 10, 16, 18, 19
-# have near-zero variance and are dropped)
+# these sensors actually change over time - sensors 1,5,6,10,16,18,19
+# are basically constant so we drop them
 USEFUL_SENSORS = [
     "sensor_2", "sensor_3", "sensor_4", "sensor_7", "sensor_8",
     "sensor_9", "sensor_11", "sensor_12", "sensor_13", "sensor_14",
@@ -56,14 +51,7 @@ def normalize_features(train_df: pd.DataFrame, test_df: pd.DataFrame,
 
 def add_rolling_features(df: pd.DataFrame, window: int = 5,
                          sensor_cols: list = USEFUL_SENSORS) -> pd.DataFrame:
-    """
-    For each engine, compute rolling statistics over the last `window` cycles:
-      - rolling mean  (smoothed trend)
-      - rolling std   (volatility / instability)
-      - rolling slope (linear degradation rate)
-
-    These capture the *trajectory* of degradation, not just the snapshot.
-    """
+    """Add rolling mean and std for each sensor to capture trends."""
     df = df.copy()
     for col in sensor_cols:
         grouped = df.groupby("engine_id")[col]

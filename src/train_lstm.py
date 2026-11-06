@@ -1,10 +1,8 @@
 """
-train_lstm.py — Train an LSTM model for sequence-based RUL prediction.
+train_lstm.py - LSTM model for RUL prediction on sensor sequences.
 
-Why LSTM? Sensor degradation is a temporal process — an engine doesn't
-just have bad readings at one moment; it *trends* toward failure over
-many cycles. LSTMs learn these sequential patterns directly from raw
-time-series, without hand-crafted rolling features.
+Uses a 2-layer LSTM to learn degradation patterns directly from
+the time-series data instead of relying on hand-crafted features.
 """
 
 import os
@@ -16,13 +14,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 
 class LSTMModel(nn.Module):
-    """
-    LSTM network for RUL regression.
-
-    Architecture:
-      - 2-layer LSTM with dropout
-      - Fully connected head: hidden → 64 → 1
-    """
+    """2-layer LSTM with FC head for RUL regression."""
 
     def __init__(self, input_dim: int, hidden_dim: int = 64,
                  num_layers: int = 2, dropout: float = 0.3):

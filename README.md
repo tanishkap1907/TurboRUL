@@ -126,7 +126,7 @@ TurboRUL/
 
 ```bash
 # Clone
-git clone https://github.com/yourusername/TurboRUL.git
+git clone https://github.com/tanishkap1907/TurboRUL.git
 cd TurboRUL
 
 # Install dependencies
@@ -145,11 +145,11 @@ Model performance on C-MAPSS FD001 test set:
 
 | Model | RMSE | MAE | R² | PHM Score |
 |-------|------|-----|-----|-----------|
-| XGBoost | — | — | — | — |
-| Random Forest | — | — | — | — |
-| LSTM | — | — | — | — |
+| XGBoost | 6.33 | 4.42 | 0.86 | 8,612 |
+| Random Forest | 6.22 | 4.18 | 0.87 | 8,591 |
+| LSTM | 4.14 | 3.18 | 0.95 | 4,023 |
 
-> **Note**: Results depend on the dataset used. With the real NASA C-MAPSS FD001 data, published benchmarks achieve RMSE ~13–18. Run `python run_pipeline.py` with the real dataset to fill in actual metrics.
+> **Note**: Results above are from the development synthetic dataset. With the real NASA C-MAPSS FD001 data (auto-downloaded when available), published benchmarks typically achieve RMSE ~13–18 on the standard last-cycle evaluation.
 
 ## Technologies
 

@@ -1,13 +1,8 @@
 """
-explainability.py — SHAP-based model interpretability for RUL predictions.
+explainability.py - SHAP analysis for interpreting RUL predictions.
 
-Why explainability matters: In predictive maintenance, stakeholders need
-to *trust* the model's prediction. Saying "engine 42 has 15 cycles left"
-isn't actionable unless you can explain *why* — which sensors are
-degrading, and how confidently.
-
-Uses SHAP (SHapley Additive exPlanations) to decompose each prediction
-into per-feature contributions.
+Uses TreeExplainer to show which sensors drive the model's
+predictions. Generates importance, summary, and waterfall plots.
 """
 
 import os

@@ -1,9 +1,8 @@
 """
-train_classical.py — Train and evaluate classical ML models (XGBoost, Random Forest).
+train_classical.py - XGBoost and Random Forest for RUL prediction.
 
-Compares tree-based approaches on flat engineered features,
-reports RMSE and a scoring function (penalises late predictions
-more heavily than early ones, following the PHM08 convention).
+Uses the PHM08 asymmetric scoring function alongside standard
+metrics (RMSE, MAE, R2).
 """
 
 import os
@@ -16,12 +15,8 @@ from xgboost import XGBRegressor
 
 
 def phm_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """
-    PHM08 scoring function — asymmetric penalty:
-      - Early prediction (y_pred > y_true): exp(-d/13) - 1
-      - Late prediction  (y_pred < y_true): exp(d/10) - 1
-    Late predictions are penalised more because missing a failure is costlier.
-    """
+    """PHM08 asymmetric scoring - penalizes late predictions more
+    because missing a failure is worse than early maintenance."""
     d = y_pred - y_true
     score = np.where(d < 0, np.exp(-d / 13) - 1, np.exp(d / 10) - 1)
     return float(np.sum(score))

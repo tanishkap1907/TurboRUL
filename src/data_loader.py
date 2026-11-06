@@ -1,17 +1,9 @@
 """
-data_loader.py — Load and label the NASA C-MAPSS turbofan degradation dataset.
+data_loader.py - Load NASA C-MAPSS turbofan degradation dataset (FD001).
 
-The C-MAPSS dataset (FD001) contains run-to-failure sensor readings from
-100 training engines and 100 test engines, each with 21 sensor channels
-and 3 operational settings. Each row is one cycle for one engine.
-
-This module:
-  1. Downloads the dataset from NASA's Prognostics Data Repository
-  2. Parses the fixed-width text files into DataFrames
-  3. Computes the Remaining Useful Life (RUL) target for each row
-  4. Applies a RUL cap (default 125 cycles) to stabilise training —
-     engines in early life are all "healthy," and distinguishing
-     RUL=200 from RUL=300 adds noise without value.
+Handles downloading, parsing, and computing RUL labels.
+If NASA's server is unreachable, falls back to synthetic data
+that mirrors FD001 statistics.
 """
 
 import os
@@ -78,46 +70,48 @@ def download_cmapss(data_dir: str = "data/raw") -> str:
 def _generate_synthetic_fd001(data_dir: str, n_train: int = 100, n_test: int = 100,
                                seed: int = 42):
     """
-    Generate a synthetic dataset that mirrors NASA C-MAPSS FD001 characteristics:
-      - 100 train engines, 100 test engines
-      - 21 sensors + 3 operational settings
-      - Lifetimes ~ Weibull distribution (128-362 cycles)
-      - Realistic sensor degradation profiles
+    Generate a synthetic dataset that mirrors NASA C-MAPSS FD001 characteristics.
 
-    This enables development/testing when the NASA server is unreachable.
-    For production benchmarking, replace with the real C-MAPSS dataset from:
+    Degradation is modelled as a function of REMAINING useful life, not
+    elapsed fraction.  This mirrors the real C-MAPSS physics: sensor
+    readings at a given RUL level are similar across engines regardless
+    of total lifetime, giving tree-based models a learnable signal.
+
+    For production benchmarking, replace with the real C-MAPSS dataset:
     https://data.nasa.gov/Aerospace/CMAPSS-Jet-Engine-Simulated-Data/ff5v-kuh6
     """
     rng = np.random.RandomState(seed)
 
-    # FD001 lifetime distribution: roughly Weibull-shaped, 128-362 cycles
+    # FD001 lifetime distribution (roughly Weibull-shaped)
     def gen_lifetimes(n):
         return rng.randint(128, 363, size=n)
 
-    # Sensor baseline and degradation profiles (from FD001 statistics)
-    # Format: (baseline_mean, baseline_std, degradation_rate, noise_std)
+    # Sensor profiles: (baseline, per-engine offset std, total_shift, noise_std)
+    #   total_shift  = value change from healthy to failure
+    #   noise_std    = cycle-to-cycle noise
+    # Sensors 1,5,6,10,16,18,19 are constant (shift=0)
     sensor_profiles = {
-        "sensor_1":  (518.67, 0.0, 0.0, 0.0),         # constant
-        "sensor_2":  (642.44, 0.5, 0.03, 0.3),
-        "sensor_3":  (1589.7, 1.0, 0.08, 0.6),
-        "sensor_4":  (1400.6, 2.0, 0.10, 1.5),
-        "sensor_5":  (14.62, 0.0, 0.0, 0.0),           # constant
-        "sensor_6":  (21.61, 0.0, 0.0, 0.0),           # constant
-        "sensor_7":  (553.0, 0.5, -0.02, 0.3),
-        "sensor_8":  (2388.0, 0.8, 0.05, 0.5),
-        "sensor_9":  (9046.0, 5.0, 0.15, 3.0),
-        "sensor_10": (1.30, 0.0, 0.0, 0.0),            # constant
-        "sensor_11": (47.27, 0.2, 0.02, 0.1),
-        "sensor_12": (521.7, 0.5, 0.03, 0.3),
-        "sensor_13": (2388.0, 0.8, 0.05, 0.5),
-        "sensor_14": (8138.0, 3.0, 0.10, 2.0),
-        "sensor_15": (8.44, 0.02, 0.001, 0.01),
-        "sensor_16": (0.03, 0.0, 0.0, 0.0),            # constant
-        "sensor_17": (392.0, 0.5, -0.01, 0.3),
-        "sensor_18": (2388.0, 0.0, 0.0, 0.0),          # constant
-        "sensor_19": (100.0, 0.0, 0.0, 0.0),           # constant
-        "sensor_20": (39.06, 0.1, -0.01, 0.08),
-        "sensor_21": (23.42, 0.1, 0.01, 0.06),
+        "sensor_1":  (518.67, 0.0,   0.0,   0.0),
+        "sensor_2":  (642.44, 0.3,   3.5,   0.35),
+        "sensor_3":  (1589.7, 0.6,   9.0,   0.7),
+        "sensor_4":  (1400.6, 1.2,   14.0,  1.6),
+        "sensor_5":  (14.62,  0.0,   0.0,   0.0),
+        "sensor_6":  (21.61,  0.0,   0.0,   0.0),
+        "sensor_7":  (553.0,  0.3,  -3.0,   0.35),
+        "sensor_8":  (2388.0, 0.4,   6.0,   0.5),
+        "sensor_9":  (9046.0, 2.5,   22.0,  3.0),
+        "sensor_10": (1.30,   0.0,   0.0,   0.0),
+        "sensor_11": (47.27,  0.1,   2.5,   0.12),
+        "sensor_12": (521.7,  0.3,   3.5,   0.35),
+        "sensor_13": (2388.0, 0.4,   6.0,   0.5),
+        "sensor_14": (8138.0, 1.5,   16.0,  2.0),
+        "sensor_15": (8.44,   0.01,  0.13,  0.012),
+        "sensor_16": (0.03,   0.0,   0.0,   0.0),
+        "sensor_17": (392.0,  0.3,  -2.0,   0.3),
+        "sensor_18": (2388.0, 0.0,   0.0,   0.0),
+        "sensor_19": (100.0,  0.0,   0.0,   0.0),
+        "sensor_20": (39.06,  0.05, -1.0,   0.08),
+        "sensor_21": (23.42,  0.05,  1.2,   0.07),
     }
 
     setting_profiles = {
@@ -126,47 +120,78 @@ def _generate_synthetic_fd001(data_dir: str, n_train: int = 100, n_test: int = 1
         "setting_3": (100.0, 0.0),
     }
 
-    def generate_engines(n_engines, lifetimes):
+    def degradation_curve(rul):
+        """Map RUL -> degradation factor in [0, 1].
+
+        Piecewise: flat near 0 for RUL > 125, then smooth ramp to 1
+        at RUL = 0.  The curve is designed so that sensor values at a
+        given RUL are comparable across engines.
+        """
+        if rul >= 125:
+            return 0.0
+        # smooth exponential-like ramp from 0 to 1 as RUL goes 125 -> 0
+        x = 1.0 - rul / 125.0           # 0 at RUL=125, 1 at RUL=0
+        return x ** 1.8                   # slight concavity — slow start, fast end
+
+    def generate_engine_rows(eid, total_cycles, n_output_cycles, rng):
+        """Generate sensor rows for one engine.
+
+        total_cycles  : full lifetime of this engine (for computing RUL)
+        n_output_cycles : how many cycles to emit (= total for train,
+                          = cutoff for test)
+        """
         rows = []
-        for eid in range(1, n_engines + 1):
-            n_cycles = lifetimes[eid - 1]
-            for cyc in range(1, n_cycles + 1):
-                row = [eid, cyc]
-                # Settings
-                for scol in ["setting_1", "setting_2", "setting_3"]:
-                    mean, std = setting_profiles[scol]
-                    row.append(round(mean + rng.normal(0, max(std, 1e-8)), 4))
-                # Sensors — exponential degradation (slow start, rapid end-of-life)
-                health = cyc / n_cycles  # 0 = healthy, 1 = failed
-                # Piece-wise: flat healthy region then exponential degradation
-                if health < 0.5:
-                    deg_factor = 0.1 * health  # minimal degradation
-                else:
-                    deg_factor = np.exp(3.0 * (health - 0.5)) - 1  # exponential ramp
-                for i in range(1, 22):
-                    scol = f"sensor_{i}"
-                    base_mean, base_std, deg_rate, noise_std = sensor_profiles[scol]
-                    degradation = deg_rate * deg_factor * 30  # scaled degradation
-                    noise = rng.normal(0, max(noise_std, 1e-8))
-                    val = base_mean + rng.normal(0, max(base_std, 1e-8)) + degradation + noise
-                    row.append(round(val, 4))
-                rows.append(row)
+
+        # per-engine random offsets (captures unit-to-unit variation)
+        offsets = {}
+        # per-engine degradation rate multiplier (some degrade faster)
+        rate_mult = rng.uniform(0.85, 1.15)
+
+        for scol, (base, off_std, shift, noise_std) in sensor_profiles.items():
+            offsets[scol] = rng.normal(0, max(off_std, 1e-9))
+
+        for cyc in range(1, n_output_cycles + 1):
+            row = [eid, cyc]
+
+            # settings
+            for scol in ["setting_1", "setting_2", "setting_3"]:
+                mean, std = setting_profiles[scol]
+                row.append(round(mean + rng.normal(0, max(std, 1e-9)), 4))
+
+            rul = total_cycles - cyc
+            deg = degradation_curve(rul) * rate_mult
+
+            for i in range(1, 22):
+                scol = f"sensor_{i}"
+                base, _, shift, noise_std = sensor_profiles[scol]
+                val = base + offsets[scol] + shift * deg
+                val += rng.normal(0, max(noise_std, 1e-9))
+                row.append(round(val, 4))
+
+            rows.append(row)
         return rows
 
-    # Generate training data (run-to-failure)
+    # --- Training data (run to failure) ---
     train_lifetimes = gen_lifetimes(n_train)
-    train_rows = generate_engines(n_train, train_lifetimes)
+    train_rows = []
+    for eid in range(1, n_train + 1):
+        lt = int(train_lifetimes[eid - 1])
+        train_rows.extend(generate_engine_rows(eid, lt, lt, rng))
 
-    # Generate test data (cut off before failure)
+    # --- Test data (cut off before failure) ---
     test_full_lifetimes = gen_lifetimes(n_test)
-    test_cutoff = np.array([rng.randint(int(lt * 0.4), int(lt * 0.85))
+    test_cutoff = np.array([rng.randint(max(30, int(lt * 0.3)),
+                                        max(31, int(lt * 0.85)))
                             for lt in test_full_lifetimes])
-    test_rows = generate_engines(n_test, test_cutoff)
+    test_rows = []
+    for eid in range(1, n_test + 1):
+        lt = int(test_full_lifetimes[eid - 1])
+        cut = int(test_cutoff[eid - 1])
+        test_rows.extend(generate_engine_rows(eid, lt, cut, rng))
 
-    # RUL ground truth = full_lifetime - cutoff
     rul_true = test_full_lifetimes - test_cutoff
 
-    # Write files in C-MAPSS format (space-separated, no header)
+    # --- Write files (C-MAPSS format: space-separated, no header) ---
     def write_data(rows, path):
         with open(path, "w") as f:
             for row in rows:
@@ -180,7 +205,7 @@ def _generate_synthetic_fd001(data_dir: str, n_train: int = 100, n_test: int = 1
             f.write(f"{r}\n")
 
     print(f"Generated synthetic FD001: {n_train} train + {n_test} test engines")
-    print(f"NOTE: Replace with real C-MAPSS data for benchmarking.")
+    print(f"NOTE: Replace with real NASA C-MAPSS data for published benchmarks.")
 
 
 def load_raw(data_dir: str = "data/raw", subset: str = "FD001"):
